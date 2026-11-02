@@ -1,0 +1,18 @@
+import '../../index.css';
+import About from './About/About';
+import FindProperty from './FindProperty/FindProperty';
+import Hero from './Hero/Hero';
+import Statistics from './Statistic/Statistic';
+
+export default function Home() {
+    return (
+        <>
+            <main>
+                <Hero />
+                <FindProperty />
+                <About />
+                <Statistics />
+            </main>
+        </>
+    );
+}
