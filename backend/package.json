@@ -9,5 +9,8 @@
   },
   "scripts": {
     "start": "node index.js"
+  },
+  "devDependencies": {
+    "eslint": "^10.14.0"
   }
 }
