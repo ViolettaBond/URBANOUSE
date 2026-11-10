@@ -167,9 +167,11 @@ app.get('/api/me', auth, (req, res) => {
     res.json({ success: true, user });
 })
 
-app.get('/api/slider', async (req, res) => {
+
+
+app.get('/api/countries', async (req, res) => {
     try{
-        const result = await pool.query('SELECT * FROM slider_info', [])
+        const result = await pool.query('SELECT * FROM countries ORDER BY id')
         res.json({
             success: true,
             data: result.rows,
@@ -181,6 +183,133 @@ app.get('/api/slider', async (req, res) => {
         });
     }
 })
+
+app.get('/api/country/:id', async (req, res) => {
+    try{
+        const id = req.params
+        const result = await pool.query('SELECT * FROM countries WHERE id = $1', [id])
+        if (result.rowCount === 0) {
+            return res.status(404).json({ success: false, error: 'Страна не найдена' });
+        }
+        res.json({
+            success: true,
+            data: result.rows[0],
+        })
+    }catch(err){
+        res.status(500).json({
+            success: false,
+            error: 'Данных нет, или проблема с сервером'
+        });
+    }
+})
+
+app.post('/api/create_country', async (req, res) => {
+    try{
+        const {name, code} = req.body
+        if(!name || !code){
+            return res.status(400).json({
+                success: false,
+                error: 'Поля name и code обязательны'
+            })
+        }
+        const result = await pool.query("INSERT INTO countries (name, code) VALUES ($1, $2) RETURNING *", [name, code])
+        res.status(201).json({
+            success: true,
+            message: "Страна успешно добавлена",
+            data: result.rows[0]
+        })
+    }
+    catch(err){
+        console.error(err)
+        if(err.code === '23505'){
+            return res.status(409).json({
+                success: false,
+                error: 'Страна с таким названием или кодом уже существует'
+            })
+        }
+        res.status(500).json({
+            success: false,
+            error: 'Данных нет, или проблема с сервером'
+        })
+    }
+})
+
+app.put('/api/country/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, code } = req.body;
+
+        if (!name || !code) {
+            return res.status(400).json({
+                success: false,
+                error: 'Поля name и code обязательны'
+            });
+        }
+
+        const result = await pool.query(
+            'UPDATE countries SET name = $1, code = $2 WHERE id = $3 RETURNING *',
+            [name, code, id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ success: false, error: 'Страна не найдена' });
+        }
+
+        res.json({
+            success: true,
+            message: 'Страна успешно обновлена',
+            data: result.rows[0]
+        });
+    } catch (err) {
+        console.error(err);
+        if (err.code === '23505') {
+            return res.status(409).json({
+                success: false,
+                error: 'Страна с таким названием или кодом уже существует'
+            });
+        }
+        res.status(500).json({ 
+            success: false, 
+            error: 'Данных нет, или проблема с сервером' 
+        });
+    }
+});
+
+app.delete('/api/country/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(
+            'DELETE FROM countries WHERE id = $1 RETURNING *',
+            [id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Страна не найдена' 
+            });
+        }
+        res.json({
+            success: true,
+            message: 'Страна успешно удалена',
+            data: result.rows[0]
+        });
+    } catch (err) {
+        console.error(err);
+        if (err.code === '23503') {
+            return res.status(409).json({
+                success: false,
+                error: 'Нельзя удалить страну: на неё ссылаются другие записи'
+            });
+        }
+        res.status(500).json({ 
+            success: false, 
+            error: 'Данных нет, или проблема с сервером'
+        });
+    }
+});
+
+
+
 app.get('/api/primery_card', async (req, res) => {
     try{
         const result = await pool.query('SELECT * FROM primery_card_info', [])
