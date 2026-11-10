@@ -184,7 +184,7 @@ app.get('/api/countries', async (req, res) => {
     }
 })
 
-app.get('/api/country/:id', async (req, res) => {
+app.get('/api/countries/:id', async (req, res) => {
     try{
         const id = req.params
         const result = await pool.query('SELECT * FROM countries WHERE id = $1', [id])
@@ -203,7 +203,7 @@ app.get('/api/country/:id', async (req, res) => {
     }
 })
 
-app.post('/api/create_country', async (req, res) => {
+app.post('/api/create_countries', async (req, res) => {
     try{
         const {name, code} = req.body
         if(!name || !code){
@@ -234,7 +234,7 @@ app.post('/api/create_country', async (req, res) => {
     }
 })
 
-app.put('/api/country/:id', async (req, res) => {
+app.put('/api/countries/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, code } = req.body;
@@ -275,7 +275,7 @@ app.put('/api/country/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/country/:id', async (req, res) => {
+app.delete('/api/countries/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const result = await pool.query(
