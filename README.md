@@ -2,6 +2,7 @@
 
 ```bash
   cd ./frontend
+  npm i
   npm run dev
 ```
 
@@ -9,6 +10,7 @@
 
 ```bash
   cd ./backend
+  npm i
   npm start
 ```
 
