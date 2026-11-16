@@ -1,13 +1,18 @@
-const express = require('express');
-const pool = require('../db');
-const { auth, optionalAuth, requireRole } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import { query } from '../db';
+import { auth, optionalAuth, requireRole } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type {
+    ApiResponse, ContactHandledBody, ContactMessage, ContactMessageBody, ContactMessagesQuery,
+    IdParams, Req
+} from '../types';
 
-const router = express.Router();
+const router = Router();
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Написать нам может любой, читать сообщения — только админ
-router.post('/contact_messages', optionalAuth, async (req, res) => {
+router.post('/contact_messages', optionalAuth, async (req: Req<Record<string, string>, ContactMessageBody>, res: Response<ApiResponse<ContactMessage>>) => {
     try {
         const { name = null, email, phone = null, message } = req.body;
         if (!email || !message) {
@@ -16,7 +21,7 @@ router.post('/contact_messages', optionalAuth, async (req, res) => {
         if (!EMAIL_RE.test(email)) {
             return res.status(400).json({ success: false, error: 'Некорректный email' });
         }
-        const result = await pool.query(
+        const result = await query<ContactMessage>(
             `INSERT INTO contact_messages (user_id, name, email, phone, message)
              VALUES ($1, $2, $3, $4, $5)
              RETURNING *`,
@@ -33,13 +38,14 @@ router.post('/contact_messages', optionalAuth, async (req, res) => {
 });
 
 // /api/contact_messages или /api/contact_messages?is_handled=false
-router.get('/contact_messages', auth, requireRole('admin'), async (req, res) => {
+router.get('/contact_messages', auth, requireRole('admin'), async (req: Req, res: Response<ApiResponse<ContactMessage[]>>) => {
     try {
-        const result = await pool.query(
+        const { is_handled } = req.query as ContactMessagesQuery;
+        const result = await query<ContactMessage>(
             `SELECT * FROM contact_messages
              WHERE ($1::boolean IS NULL OR is_handled = $1)
              ORDER BY created_at DESC`,
-            [req.query.is_handled ? req.query.is_handled === 'true' : null]
+            [is_handled ? is_handled === 'true' : null]
         );
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -47,9 +53,9 @@ router.get('/contact_messages', auth, requireRole('admin'), async (req, res) => 
     }
 });
 
-router.get('/contact_messages/:id', auth, requireRole('admin'), async (req, res) => {
+router.get('/contact_messages/:id', auth, requireRole('admin'), async (req: Req<IdParams>, res: Response<ApiResponse<ContactMessage>>) => {
     try {
-        const result = await pool.query('SELECT * FROM contact_messages WHERE id = $1', [req.params.id]);
+        const result = await query<ContactMessage>('SELECT * FROM contact_messages WHERE id = $1', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Сообщение не найдено' });
         }
@@ -60,13 +66,13 @@ router.get('/contact_messages/:id', auth, requireRole('admin'), async (req, res)
 });
 
 // Отметить обработанным: { "is_handled": true }
-router.put('/contact_messages/:id', auth, requireRole('admin'), async (req, res) => {
+router.put('/contact_messages/:id', auth, requireRole('admin'), async (req: Req<IdParams, ContactHandledBody>, res: Response<ApiResponse<ContactMessage>>) => {
     try {
         const { is_handled } = req.body;
         if (typeof is_handled !== 'boolean') {
             return res.status(400).json({ success: false, error: 'Поле is_handled должно быть true или false' });
         }
-        const result = await pool.query(
+        const result = await query<ContactMessage>(
             'UPDATE contact_messages SET is_handled = $1 WHERE id = $2 RETURNING *',
             [is_handled, req.params.id]
         );
@@ -83,9 +89,9 @@ router.put('/contact_messages/:id', auth, requireRole('admin'), async (req, res)
     }
 });
 
-router.delete('/contact_messages/:id', auth, requireRole('admin'), async (req, res) => {
+router.delete('/contact_messages/:id', auth, requireRole('admin'), async (req: Req<IdParams>, res: Response<ApiResponse<ContactMessage>>) => {
     try {
-        const result = await pool.query('DELETE FROM contact_messages WHERE id = $1 RETURNING *', [req.params.id]);
+        const result = await query<ContactMessage>('DELETE FROM contact_messages WHERE id = $1 RETURNING *', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Сообщение не найдено' });
         }
@@ -99,4 +105,4 @@ router.delete('/contact_messages/:id', auth, requireRole('admin'), async (req, r
     }
 });
 
-module.exports = router;
+export default router;

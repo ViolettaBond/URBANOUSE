@@ -1,22 +1,26 @@
-const express = require('express');
-const pool = require('../db');
-const { auth, requireRole } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import { query } from '../db';
+import { auth, requireRole } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type {
+    ApiResponse, CreateProjectBody, IdParams, Project, Req, UpdateProjectBody
+} from '../types';
 
-const router = express.Router();
+const router = Router();
 
-router.get('/projects', async (req, res) => {
+router.get('/projects', async (_req: Req, res: Response<ApiResponse<Project[]>>) => {
     try {
-        const result = await pool.query('SELECT * FROM projects ORDER BY id');
+        const result = await query<Project>('SELECT * FROM projects ORDER BY id');
         res.json({ success: true, data: result.rows });
     } catch (err) {
         handleError(res, err);
     }
 });
 
-router.get('/projects/:id', async (req, res) => {
+router.get('/projects/:id', async (req: Req<IdParams>, res: Response<ApiResponse<Project>>) => {
     try {
-        const result = await pool.query('SELECT * FROM projects WHERE id = $1', [req.params.id]);
+        const result = await query<Project>('SELECT * FROM projects WHERE id = $1', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Проект не найден' });
         }
@@ -26,7 +30,7 @@ router.get('/projects/:id', async (req, res) => {
     }
 });
 
-router.post('/projects', auth, requireRole('admin'), async (req, res) => {
+router.post('/projects', auth, requireRole('admin'), async (req: Req<Record<string, string>, CreateProjectBody>, res: Response<ApiResponse<Project>>) => {
     try {
         const {
             slug, title, description = null, city_id = null, cover_url = null,
@@ -35,7 +39,7 @@ router.post('/projects', auth, requireRole('admin'), async (req, res) => {
         if (!slug || !title) {
             return res.status(400).json({ success: false, error: 'Поля slug и title обязательны' });
         }
-        const result = await pool.query(
+        const result = await query<Project>(
             `INSERT INTO projects (slug, title, description, city_id, cover_url, units_available, is_published)
              VALUES ($1, $2, $3, $4, $5, COALESCE($6, 0), COALESCE($7, TRUE))
              RETURNING *`,
@@ -55,10 +59,10 @@ router.post('/projects', auth, requireRole('admin'), async (req, res) => {
 });
 
 // Передавайте только те поля, которые нужно изменить
-router.put('/projects/:id', auth, requireRole('admin'), async (req, res) => {
+router.put('/projects/:id', auth, requireRole('admin'), async (req: Req<IdParams, UpdateProjectBody>, res: Response<ApiResponse<Project>>) => {
     try {
         const { slug, title, description, city_id, cover_url, units_available, is_published } = req.body;
-        const result = await pool.query(
+        const result = await query<Project>(
             `UPDATE projects SET
                 slug            = COALESCE($1, slug),
                 title           = COALESCE($2, title),
@@ -90,9 +94,9 @@ router.put('/projects/:id', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-router.delete('/projects/:id', auth, requireRole('admin'), async (req, res) => {
+router.delete('/projects/:id', auth, requireRole('admin'), async (req: Req<IdParams>, res: Response<ApiResponse<Project>>) => {
     try {
-        const result = await pool.query('DELETE FROM projects WHERE id = $1 RETURNING *', [req.params.id]);
+        const result = await query<Project>('DELETE FROM projects WHERE id = $1 RETURNING *', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Проект не найден' });
         }
@@ -106,4 +110,4 @@ router.delete('/projects/:id', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

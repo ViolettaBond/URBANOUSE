@@ -1,22 +1,24 @@
-const express = require('express');
-const pool = require('../db');
-const { auth, requireRole } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import { query } from '../db';
+import { auth, requireRole } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type { Amenity, ApiResponse, IdParams, Req, SlugNameBody } from '../types';
 
-const router = express.Router();
+const router = Router();
 
-router.get('/amenities', async (req, res) => {
+router.get('/amenities', async (_req: Req, res: Response<ApiResponse<Amenity[]>>) => {
     try {
-        const result = await pool.query('SELECT * FROM amenities ORDER BY id');
+        const result = await query<Amenity>('SELECT * FROM amenities ORDER BY id');
         res.json({ success: true, data: result.rows });
     } catch (err) {
         handleError(res, err);
     }
 });
 
-router.get('/amenities/:id', async (req, res) => {
+router.get('/amenities/:id', async (req: Req<IdParams>, res: Response<ApiResponse<Amenity>>) => {
     try {
-        const result = await pool.query('SELECT * FROM amenities WHERE id = $1', [req.params.id]);
+        const result = await query<Amenity>('SELECT * FROM amenities WHERE id = $1', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Удобство не найдено' });
         }
@@ -26,13 +28,13 @@ router.get('/amenities/:id', async (req, res) => {
     }
 });
 
-router.post('/amenities', auth, requireRole('admin'), async (req, res) => {
+router.post('/amenities', auth, requireRole('admin'), async (req: Req<Record<string, string>, SlugNameBody>, res: Response<ApiResponse<Amenity>>) => {
     try {
         const { slug, name } = req.body;
         if (!slug || !name) {
             return res.status(400).json({ success: false, error: 'Поля slug и name обязательны' });
         }
-        const result = await pool.query(
+        const result = await query<Amenity>(
             'INSERT INTO amenities (slug, name) VALUES ($1, $2) RETURNING *',
             [slug, name]
         );
@@ -46,13 +48,13 @@ router.post('/amenities', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-router.put('/amenities/:id', auth, requireRole('admin'), async (req, res) => {
+router.put('/amenities/:id', auth, requireRole('admin'), async (req: Req<IdParams, SlugNameBody>, res: Response<ApiResponse<Amenity>>) => {
     try {
         const { slug, name } = req.body;
         if (!slug || !name) {
             return res.status(400).json({ success: false, error: 'Поля slug и name обязательны' });
         }
-        const result = await pool.query(
+        const result = await query<Amenity>(
             'UPDATE amenities SET slug = $1, name = $2 WHERE id = $3 RETURNING *',
             [slug, name, req.params.id]
         );
@@ -69,9 +71,9 @@ router.put('/amenities/:id', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-router.delete('/amenities/:id', auth, requireRole('admin'), async (req, res) => {
+router.delete('/amenities/:id', auth, requireRole('admin'), async (req: Req<IdParams>, res: Response<ApiResponse<Amenity>>) => {
     try {
-        const result = await pool.query('DELETE FROM amenities WHERE id = $1 RETURNING *', [req.params.id]);
+        const result = await query<Amenity>('DELETE FROM amenities WHERE id = $1 RETURNING *', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Удобство не найдено' });
         }
@@ -85,4 +87,4 @@ router.delete('/amenities/:id', auth, requireRole('admin'), async (req, res) => 
     }
 });
 
-module.exports = router;
+export default router;

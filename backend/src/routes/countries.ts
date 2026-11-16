@@ -1,24 +1,26 @@
-const express = require('express');
-const pool = require('../db');
-const { auth, requireRole } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import { query } from '../db';
+import { auth, requireRole } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type { ApiResponse, CountryBody, Country, IdParams, Req } from '../types';
 
-const router = express.Router();
+const router = Router();
 
 // Читать можно без входа, менять — только админу
-router.get('/countries', async (req, res) => {
+router.get('/countries', async (_req: Req, res: Response<ApiResponse<Country[]>>) => {
     try {
-        const result = await pool.query('SELECT * FROM countries ORDER BY id');
+        const result = await query<Country>('SELECT * FROM countries ORDER BY id');
         res.json({ success: true, data: result.rows });
     } catch (err) {
         handleError(res, err);
     }
 });
 
-router.get('/countries/:id', async (req, res) => {
+router.get('/countries/:id', async (req: Req<IdParams>, res: Response<ApiResponse<Country>>) => {
     try {
         const { id } = req.params;
-        const result = await pool.query('SELECT * FROM countries WHERE id = $1', [id]);
+        const result = await query<Country>('SELECT * FROM countries WHERE id = $1', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Страна не найдена' });
         }
@@ -28,13 +30,13 @@ router.get('/countries/:id', async (req, res) => {
     }
 });
 
-router.post('/create_countries', auth, requireRole('admin'), async (req, res) => {
+router.post('/create_countries', auth, requireRole('admin'), async (req: Req<Record<string, string>, CountryBody>, res: Response<ApiResponse<Country>>) => {
     try {
         const { name, code } = req.body;
         if (!name || !code) {
             return res.status(400).json({ success: false, error: 'Поля name и code обязательны' });
         }
-        const result = await pool.query(
+        const result = await query<Country>(
             'INSERT INTO countries (name, code) VALUES ($1, $2) RETURNING *',
             [name, code]
         );
@@ -48,14 +50,14 @@ router.post('/create_countries', auth, requireRole('admin'), async (req, res) =>
     }
 });
 
-router.put('/countries/:id', auth, requireRole('admin'), async (req, res) => {
+router.put('/countries/:id', auth, requireRole('admin'), async (req: Req<IdParams, CountryBody>, res: Response<ApiResponse<Country>>) => {
     try {
         const { id } = req.params;
         const { name, code } = req.body;
         if (!name || !code) {
             return res.status(400).json({ success: false, error: 'Поля name и code обязательны' });
         }
-        const result = await pool.query(
+        const result = await query<Country>(
             'UPDATE countries SET name = $1, code = $2 WHERE id = $3 RETURNING *',
             [name, code, id]
         );
@@ -72,10 +74,10 @@ router.put('/countries/:id', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-router.delete('/countries/:id', auth, requireRole('admin'), async (req, res) => {
+router.delete('/countries/:id', auth, requireRole('admin'), async (req: Req<IdParams>, res: Response<ApiResponse<Country>>) => {
     try {
         const { id } = req.params;
-        const result = await pool.query('DELETE FROM countries WHERE id = $1 RETURNING *', [id]);
+        const result = await query<Country>('DELETE FROM countries WHERE id = $1 RETURNING *', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Страна не найдена' });
         }
@@ -89,4 +91,4 @@ router.delete('/countries/:id', auth, requireRole('admin'), async (req, res) => 
     }
 });
 
-module.exports = router;
+export default router;

@@ -1,19 +1,23 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const pool = require('../db');
-const { auth, requireRole, PUBLIC_USER_FIELDS } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import bcrypt from 'bcrypt';
+import { query } from '../db';
+import { auth, requireRole, PUBLIC_USER_FIELDS } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type {
+    ApiResponse, AuthUser, CreateUserBody, IdParams, Req, UpdateUserBody, User
+} from '../types';
 
-const router = express.Router();
+const router = Router();
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ROLES = ['user', 'agent', 'admin'];
+const ROLES: readonly string[] = ['user', 'agent', 'admin'];
 
 // Всё управление пользователями — только для админа
 router.use('/users', auth, requireRole('admin'));
 
-router.get('/users', async (req, res) => {
+router.get('/users', async (_req: Req, res: Response<ApiResponse<AuthUser[]>>) => {
     try {
-        const result = await pool.query(
+        const result = await query<AuthUser>(
             `SELECT ${PUBLIC_USER_FIELDS}, is_active FROM users ORDER BY id`
         );
         res.json({ success: true, data: result.rows });
@@ -22,9 +26,9 @@ router.get('/users', async (req, res) => {
     }
 });
 
-router.get('/users/:id', async (req, res) => {
+router.get('/users/:id', async (req: Req<IdParams>, res: Response<ApiResponse<AuthUser>>) => {
     try {
-        const result = await pool.query(
+        const result = await query<AuthUser>(
             `SELECT ${PUBLIC_USER_FIELDS}, is_active FROM users WHERE id = $1`,
             [req.params.id]
         );
@@ -37,7 +41,7 @@ router.get('/users/:id', async (req, res) => {
     }
 });
 
-router.post('/users', async (req, res) => {
+router.post('/users', async (req: Req<Record<string, string>, CreateUserBody>, res: Response<ApiResponse<AuthUser>>) => {
     try {
         const { first_name, last_name, email, password, role = 'user', phone = null } = req.body;
         if (!first_name || !last_name || !email || !password) {
@@ -57,7 +61,7 @@ router.post('/users', async (req, res) => {
         }
 
         const hash = await bcrypt.hash(String(password), 10);
-        const result = await pool.query(
+        const result = await query<AuthUser>(
             `INSERT INTO users (first_name, last_name, email, password_hash, role, phone)
              VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING ${PUBLIC_USER_FIELDS}, is_active`,
@@ -74,18 +78,18 @@ router.post('/users', async (req, res) => {
 });
 
 // Передавайте только те поля, которые нужно изменить
-router.put('/users/:id', async (req, res) => {
+router.put('/users/:id', async (req: Req<IdParams, UpdateUserBody>, res: Response<ApiResponse<AuthUser>>) => {
     try {
         const { first_name, last_name, phone, role, is_active } = req.body;
         if (role && !ROLES.includes(role)) {
             return res.status(400).json({ success: false, error: 'Некорректная роль' });
         }
         // Чтобы админ случайно не лишил себя прав
-        if (String(req.user.id) === req.params.id && (is_active === false || (role && role !== 'admin'))) {
+        if (String(req.user!.id) === req.params.id && (is_active === false || (role && role !== 'admin'))) {
             return res.status(400).json({ success: false, error: 'Нельзя снять с себя роль админа или заблокировать себя' });
         }
 
-        const result = await pool.query(
+        const result = await query<AuthUser>(
             `UPDATE users SET
                 first_name = COALESCE($1, first_name),
                 last_name  = COALESCE($2, last_name),
@@ -109,12 +113,12 @@ router.put('/users/:id', async (req, res) => {
     }
 });
 
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', async (req: Req<IdParams>, res: Response<ApiResponse<User>>) => {
     try {
-        if (String(req.user.id) === req.params.id) {
+        if (String(req.user!.id) === req.params.id) {
             return res.status(400).json({ success: false, error: 'Нельзя удалить самого себя' });
         }
-        const result = await pool.query(
+        const result = await query<User>(
             `DELETE FROM users WHERE id = $1 RETURNING ${PUBLIC_USER_FIELDS}`,
             [req.params.id]
         );
@@ -131,4 +135,4 @@ router.delete('/users/:id', async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

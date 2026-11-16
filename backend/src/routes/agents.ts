@@ -1,20 +1,25 @@
-const express = require('express');
-const pool = require('../db');
-const { auth, requireRole } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import { query } from '../db';
+import { auth, requireRole } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type {
+    Agent, AgentsQuery, AgentWithCity, ApiResponse, CreateAgentBody, IdParams, Req, UpdateAgentBody
+} from '../types';
 
-const router = express.Router();
+const router = Router();
 
 // GET /api/agents или /api/agents?city_id=1
-router.get('/agents', async (req, res) => {
+router.get('/agents', async (req: Req, res: Response<ApiResponse<AgentWithCity[]>>) => {
     try {
-        const result = await pool.query(
+        const { city_id } = req.query as AgentsQuery;
+        const result = await query<AgentWithCity>(
             `SELECT a.*, c.name AS city
              FROM agents a
              LEFT JOIN cities c ON c.id = a.city_id
              WHERE a.is_active = TRUE AND ($1::int IS NULL OR a.city_id = $1)
              ORDER BY a.rating DESC NULLS LAST, a.id`,
-            [req.query.city_id || null]
+            [city_id || null]
         );
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -22,9 +27,9 @@ router.get('/agents', async (req, res) => {
     }
 });
 
-router.get('/agents/:id', async (req, res) => {
+router.get('/agents/:id', async (req: Req<IdParams>, res: Response<ApiResponse<AgentWithCity>>) => {
     try {
-        const result = await pool.query(
+        const result = await query<AgentWithCity>(
             `SELECT a.*, c.name AS city
              FROM agents a
              LEFT JOIN cities c ON c.id = a.city_id
@@ -40,7 +45,7 @@ router.get('/agents/:id', async (req, res) => {
     }
 });
 
-router.post('/agents', auth, requireRole('admin'), async (req, res) => {
+router.post('/agents', auth, requireRole('admin'), async (req: Req<Record<string, string>, CreateAgentBody>, res: Response<ApiResponse<Agent>>) => {
     try {
         const {
             user_id = null, first_name, last_name, title = null, bio = null, photo_url = null,
@@ -49,7 +54,7 @@ router.post('/agents', auth, requireRole('admin'), async (req, res) => {
         if (!first_name || !last_name) {
             return res.status(400).json({ success: false, error: 'Поля first_name и last_name обязательны' });
         }
-        const result = await pool.query(
+        const result = await query<Agent>(
             `INSERT INTO agents (user_id, first_name, last_name, title, bio, photo_url, email, phone, city_id, rating, properties_sold)
              VALUES ($1, $2, $3, COALESCE($4, 'Senior Real Estate Advisor'), $5, $6, $7, $8, $9, $10, COALESCE($11, 0))
              RETURNING *`,
@@ -69,13 +74,13 @@ router.post('/agents', auth, requireRole('admin'), async (req, res) => {
 });
 
 // Передавайте только те поля, которые нужно изменить
-router.put('/agents/:id', auth, requireRole('admin'), async (req, res) => {
+router.put('/agents/:id', auth, requireRole('admin'), async (req: Req<IdParams, UpdateAgentBody>, res: Response<ApiResponse<Agent>>) => {
     try {
         const {
             user_id, first_name, last_name, title, bio, photo_url,
             email, phone, city_id, rating, properties_sold, is_active
         } = req.body;
-        const result = await pool.query(
+        const result = await query<Agent>(
             `UPDATE agents SET
                 user_id         = COALESCE($1, user_id),
                 first_name      = COALESCE($2, first_name),
@@ -113,9 +118,9 @@ router.put('/agents/:id', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-router.delete('/agents/:id', auth, requireRole('admin'), async (req, res) => {
+router.delete('/agents/:id', auth, requireRole('admin'), async (req: Req<IdParams>, res: Response<ApiResponse<Agent>>) => {
     try {
-        const result = await pool.query('DELETE FROM agents WHERE id = $1 RETURNING *', [req.params.id]);
+        const result = await query<Agent>('DELETE FROM agents WHERE id = $1 RETURNING *', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Агент не найден' });
         }
@@ -129,4 +134,4 @@ router.delete('/agents/:id', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

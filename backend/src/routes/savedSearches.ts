@@ -1,17 +1,19 @@
-const express = require('express');
-const pool = require('../db');
-const { auth } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import { query } from '../db';
+import { auth } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type { ApiResponse, IdParams, Req, SavedSearch, SavedSearchBody } from '../types';
 
-const router = express.Router();
+const router = Router();
 const FK_MESSAGE = { fk: 'Город или тип недвижимости не найден' };
 
 // Сохранённые поиски — личные: везде фильтруем по user_id = req.user.id
-router.get('/saved_searches', auth, async (req, res) => {
+router.get('/saved_searches', auth, async (req: Req, res: Response<ApiResponse<SavedSearch[]>>) => {
     try {
-        const result = await pool.query(
+        const result = await query<SavedSearch>(
             'SELECT * FROM saved_searches WHERE user_id = $1 ORDER BY id DESC',
-            [req.user.id]
+            [req.user!.id]
         );
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -19,11 +21,11 @@ router.get('/saved_searches', auth, async (req, res) => {
     }
 });
 
-router.get('/saved_searches/:id', auth, async (req, res) => {
+router.get('/saved_searches/:id', auth, async (req: Req<IdParams>, res: Response<ApiResponse<SavedSearch>>) => {
     try {
-        const result = await pool.query(
+        const result = await query<SavedSearch>(
             'SELECT * FROM saved_searches WHERE id = $1 AND user_id = $2',
-            [req.params.id, req.user.id]
+            [req.params.id, req.user!.id]
         );
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Сохранённый поиск не найден' });
@@ -34,18 +36,18 @@ router.get('/saved_searches/:id', auth, async (req, res) => {
     }
 });
 
-router.post('/saved_searches', auth, async (req, res) => {
+router.post('/saved_searches', auth, async (req: Req<Record<string, string>, SavedSearchBody>, res: Response<ApiResponse<SavedSearch>>) => {
     try {
         const {
             name = null, listing_type = null, city_id = null, property_type_id = null,
             min_bedrooms = null, max_price = null, alerts_enabled = null
         } = req.body;
-        const result = await pool.query(
+        const result = await query<SavedSearch>(
             `INSERT INTO saved_searches
                 (user_id, name, listing_type, city_id, property_type_id, min_bedrooms, max_price, alerts_enabled)
              VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, TRUE))
              RETURNING *`,
-            [req.user.id, name, listing_type, city_id, property_type_id, min_bedrooms, max_price, alerts_enabled]
+            [req.user!.id, name, listing_type, city_id, property_type_id, min_bedrooms, max_price, alerts_enabled]
         );
         res.status(201).json({
             success: true,
@@ -58,10 +60,10 @@ router.post('/saved_searches', auth, async (req, res) => {
 });
 
 // Передавайте только те поля, которые нужно изменить
-router.put('/saved_searches/:id', auth, async (req, res) => {
+router.put('/saved_searches/:id', auth, async (req: Req<IdParams, SavedSearchBody>, res: Response<ApiResponse<SavedSearch>>) => {
     try {
         const { name, listing_type, city_id, property_type_id, min_bedrooms, max_price, alerts_enabled } = req.body;
-        const result = await pool.query(
+        const result = await query<SavedSearch>(
             `UPDATE saved_searches SET
                 name             = COALESCE($1, name),
                 listing_type     = COALESCE($2::listing_type, listing_type),
@@ -75,7 +77,7 @@ router.put('/saved_searches/:id', auth, async (req, res) => {
             [
                 name ?? null, listing_type ?? null, city_id ?? null, property_type_id ?? null,
                 min_bedrooms ?? null, max_price ?? null, alerts_enabled ?? null,
-                req.params.id, req.user.id
+                req.params.id, req.user!.id
             ]
         );
         if (result.rowCount === 0) {
@@ -91,11 +93,11 @@ router.put('/saved_searches/:id', auth, async (req, res) => {
     }
 });
 
-router.delete('/saved_searches/:id', auth, async (req, res) => {
+router.delete('/saved_searches/:id', auth, async (req: Req<IdParams>, res: Response<ApiResponse<SavedSearch>>) => {
     try {
-        const result = await pool.query(
+        const result = await query<SavedSearch>(
             'DELETE FROM saved_searches WHERE id = $1 AND user_id = $2 RETURNING *',
-            [req.params.id, req.user.id]
+            [req.params.id, req.user!.id]
         );
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Сохранённый поиск не найден' });
@@ -110,4 +112,4 @@ router.delete('/saved_searches/:id', auth, async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

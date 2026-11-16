@@ -1,34 +1,48 @@
-const jwt = require('jsonwebtoken');
-const pool = require('../db');
+import jwt from 'jsonwebtoken';
+import type { SignOptions } from 'jsonwebtoken';
+import type { RequestHandler } from 'express';
+import { query } from '../db';
+import type { AuthUser, TokenPayload, User, UserRole } from '../types';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-    console.error('JWT_SECRET не задан в .env');
-    process.exit(1);
-}
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const requireEnv = (name: string): string => {
+    const value = process.env[name];
+    if (!value) {
+        console.error(`${name} не задан в .env`);
+        process.exit(1);
+    }
+    return value;
+};
+
+const JWT_SECRET = requireEnv('JWT_SECRET');
+const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '7d') as SignOptions['expiresIn'];
 
 // Поля пользователя, которые можно отдавать клиенту (без password_hash)
-const PUBLIC_USER_FIELDS = `id, first_name, last_name, email, role, phone, avatar_url,
+export const PUBLIC_USER_FIELDS = `id, first_name, last_name, email, role, phone, avatar_url,
     email_verified_at, last_login_at, created_at`;
 
-const signToken = (user) =>
-    jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+export const signToken = (user: Pick<User, 'id' | 'role'>): string => {
+    const payload: TokenPayload = { id: user.id, role: user.role };
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+};
 
 // Проверяет заголовок "Authorization: Bearer <token>",
 // подгружает пользователя из БД и убеждается, что он активен
-const auth = async (req, res, next) => {
+export const auth: RequestHandler = async (req, res, next) => {
     const header = req.headers.authorization || '';
     const [scheme, token] = header.split(' ');
     if (scheme !== 'Bearer' || !token) {
         return res.status(401).json({ success: false, error: 'Токен не передан' });
     }
 
-    let payload;
+    let payload: TokenPayload;
     try {
-        payload = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (typeof decoded === 'string' || decoded.id === undefined) {
+            throw new jwt.JsonWebTokenError('invalid payload');
+        }
+        payload = decoded as unknown as TokenPayload;
     } catch (err) {
-        const expired = err.name === 'TokenExpiredError';
+        const expired = err instanceof Error && err.name === 'TokenExpiredError';
         return res.status(401).json({
             success: false,
             error: expired ? 'Срок действия токена истёк' : 'Недействительный токен'
@@ -36,7 +50,7 @@ const auth = async (req, res, next) => {
     }
 
     try {
-        const result = await pool.query(
+        const result = await query<AuthUser>(
             `SELECT ${PUBLIC_USER_FIELDS}, is_active FROM users WHERE id = $1`,
             [payload.id]
         );
@@ -54,21 +68,19 @@ const auth = async (req, res, next) => {
 
 // Для маршрутов, где вход необязателен (например, заявка от гостя):
 // есть токен — подставляем пользователя, нет — идём дальше как гость
-const optionalAuth = (req, res, next) => {
+export const optionalAuth: RequestHandler = (req, res, next) => {
     if (!req.headers.authorization) {
         req.user = null;
         return next();
     }
-    auth(req, res, next);
+    return auth(req, res, next);
 };
 
 // Доступ только для указанных ролей, ставится ПОСЛЕ auth
 // пример: router.delete('/countries/:id', auth, requireRole('admin'), handler)
-const requireRole = (...roles) => (req, res, next) => {
+export const requireRole = (...roles: UserRole[]): RequestHandler => (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
         return res.status(403).json({ success: false, error: 'Недостаточно прав' });
     }
     next();
 };
-
-module.exports = { auth, optionalAuth, requireRole, signToken, PUBLIC_USER_FIELDS };

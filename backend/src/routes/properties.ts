@@ -1,18 +1,23 @@
-const express = require('express');
-const pool = require('../db');
-const { auth, requireRole } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import { query } from '../db';
+import { auth, requireRole } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type {
+    AmenityIdsBody, ApiResponse, IdParams, MessageResponse, Property, PropertyBody, PropertyDetails,
+    PropertyImage, PropertyImageBody, PropertyListItem, PropertiesQuery, Req
+} from '../types';
 
-const router = express.Router();
+const router = Router();
 const FK_MESSAGE = { fk: 'Город, тип недвижимости, агент или проект не найден' };
 
 // Список активных объектов с фильтрами (все фильтры необязательные):
 // /api/properties?listing_type=sale&city_id=1&property_type_id=2&agent_id=3
 //                &min_price=100000&max_price=900000&min_bedrooms=2&is_featured=true&is_popular=true
-router.get('/properties', async (req, res) => {
+router.get('/properties', async (req: Req, res: Response<ApiResponse<PropertyListItem[]>>) => {
     try {
-        const q = req.query;
-        const result = await pool.query(
+        const q = req.query as PropertiesQuery;
+        const result = await query<PropertyListItem>(
             `SELECT p.*, c.name AS city, pt.name AS property_type,
                     (SELECT url FROM property_images
                       WHERE property_id = p.id ORDER BY is_cover DESC, sort_order LIMIT 1) AS cover_url
@@ -44,9 +49,9 @@ router.get('/properties', async (req, res) => {
 });
 
 // Один объект + его фото и удобства
-router.get('/properties/:id', async (req, res) => {
+router.get('/properties/:id', async (req: Req<IdParams>, res: Response<ApiResponse<PropertyDetails>>) => {
     try {
-        const result = await pool.query(
+        const result = await query<Property & { city: string; property_type: string }>(
             `SELECT p.*, c.name AS city, pt.name AS property_type
              FROM properties p
              JOIN cities c ON c.id = p.city_id
@@ -57,11 +62,11 @@ router.get('/properties/:id', async (req, res) => {
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Объект не найден' });
         }
-        const images = await pool.query(
+        const images = await query<PropertyDetails['images'][number]>(
             'SELECT id, url, alt_text, sort_order, is_cover FROM property_images WHERE property_id = $1 ORDER BY sort_order',
             [req.params.id]
         );
-        const amenities = await pool.query(
+        const amenities = await query<PropertyDetails['amenities'][number]>(
             `SELECT a.id, a.slug, a.name
              FROM property_amenities pa
              JOIN amenities a ON a.id = pa.amenity_id
@@ -78,7 +83,7 @@ router.get('/properties/:id', async (req, res) => {
 });
 
 // Создавать, менять и удалять объекты могут агенты и админы
-router.post('/properties', auth, requireRole('agent', 'admin'), async (req, res) => {
+router.post('/properties', auth, requireRole('agent', 'admin'), async (req: Req<Record<string, string>, PropertyBody>, res: Response<ApiResponse<Property>>) => {
     try {
         const {
             slug, title, description = null, listing_type, status = null, property_type_id,
@@ -95,7 +100,7 @@ router.post('/properties', auth, requireRole('agent', 'admin'), async (req, res)
             });
         }
 
-        const result = await pool.query(
+        const result = await query<Property>(
             `INSERT INTO properties (
                 slug, title, description, listing_type, status, property_type_id, agent_id,
                 price, currency, bedrooms, bathrooms, area_sqft, garage_spaces, year_built,
@@ -125,10 +130,10 @@ router.post('/properties', auth, requireRole('agent', 'admin'), async (req, res)
 });
 
 // Передавайте только те поля, которые нужно изменить
-router.put('/properties/:id', auth, requireRole('agent', 'admin'), async (req, res) => {
+router.put('/properties/:id', auth, requireRole('agent', 'admin'), async (req: Req<IdParams, PropertyBody>, res: Response<ApiResponse<Property>>) => {
     try {
         const b = req.body;
-        const result = await pool.query(
+        const result = await query<Property>(
             `UPDATE properties SET
                 slug             = COALESCE($1, slug),
                 title            = COALESCE($2, title),
@@ -176,9 +181,9 @@ router.put('/properties/:id', auth, requireRole('agent', 'admin'), async (req, r
     }
 });
 
-router.delete('/properties/:id', auth, requireRole('agent', 'admin'), async (req, res) => {
+router.delete('/properties/:id', auth, requireRole('agent', 'admin'), async (req: Req<IdParams>, res: Response<ApiResponse<Property>>) => {
     try {
-        const result = await pool.query('DELETE FROM properties WHERE id = $1 RETURNING *', [req.params.id]);
+        const result = await query<Property>('DELETE FROM properties WHERE id = $1 RETURNING *', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Объект не найден' });
         }
@@ -194,7 +199,7 @@ router.delete('/properties/:id', auth, requireRole('agent', 'admin'), async (req
 
 /* ---------- Фото объекта ---------- */
 
-router.post('/properties/:id/images', auth, requireRole('agent', 'admin'), async (req, res) => {
+router.post('/properties/:id/images', auth, requireRole('agent', 'admin'), async (req: Req<IdParams, PropertyImageBody>, res: Response<ApiResponse<PropertyImage>>) => {
     try {
         const { url, alt_text = null, sort_order = 0, is_cover = false } = req.body;
         if (!url) {
@@ -202,9 +207,9 @@ router.post('/properties/:id/images', auth, requireRole('agent', 'admin'), async
         }
         // у объекта может быть только одна обложка
         if (is_cover) {
-            await pool.query('UPDATE property_images SET is_cover = FALSE WHERE property_id = $1', [req.params.id]);
+            await query('UPDATE property_images SET is_cover = FALSE WHERE property_id = $1', [req.params.id]);
         }
-        const result = await pool.query(
+        const result = await query<PropertyImage>(
             `INSERT INTO property_images (property_id, url, alt_text, sort_order, is_cover)
              VALUES ($1, $2, $3, $4, $5) RETURNING *`,
             [req.params.id, url, alt_text, sort_order, is_cover]
@@ -219,9 +224,9 @@ router.post('/properties/:id/images', auth, requireRole('agent', 'admin'), async
     }
 });
 
-router.delete('/property_images/:id', auth, requireRole('agent', 'admin'), async (req, res) => {
+router.delete('/property_images/:id', auth, requireRole('agent', 'admin'), async (req: Req<IdParams>, res: Response<ApiResponse<PropertyImage>>) => {
     try {
-        const result = await pool.query('DELETE FROM property_images WHERE id = $1 RETURNING *', [req.params.id]);
+        const result = await query<PropertyImage>('DELETE FROM property_images WHERE id = $1 RETURNING *', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Фото не найдено' });
         }
@@ -238,15 +243,15 @@ router.delete('/property_images/:id', auth, requireRole('agent', 'admin'), async
 /* ---------- Удобства объекта ---------- */
 
 // Заменяет весь список удобств: { "amenity_ids": [1, 2] }
-router.put('/properties/:id/amenities', auth, requireRole('agent', 'admin'), async (req, res) => {
+router.put('/properties/:id/amenities', auth, requireRole('agent', 'admin'), async (req: Req<IdParams, AmenityIdsBody>, res: Response<MessageResponse>) => {
     try {
         const { amenity_ids } = req.body;
         if (!Array.isArray(amenity_ids)) {
             return res.status(400).json({ success: false, error: 'Передайте массив amenity_ids' });
         }
-        await pool.query('DELETE FROM property_amenities WHERE property_id = $1', [req.params.id]);
+        await query('DELETE FROM property_amenities WHERE property_id = $1', [req.params.id]);
         if (amenity_ids.length > 0) {
-            await pool.query(
+            await query(
                 `INSERT INTO property_amenities (property_id, amenity_id)
                  SELECT $1, unnest($2::smallint[]) ON CONFLICT DO NOTHING`,
                 [req.params.id, amenity_ids]
@@ -258,4 +263,4 @@ router.put('/properties/:id/amenities', auth, requireRole('agent', 'admin'), asy
     }
 });
 
-module.exports = router;
+export default router;

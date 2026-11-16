@@ -1,16 +1,19 @@
-const express = require('express');
-const pool = require('../db');
-const { auth, requireRole } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import { query } from '../db';
+import { auth, requireRole } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type { ApiResponse, CitiesQuery, City, CityBody, IdParams, Req } from '../types';
 
-const router = express.Router();
+const router = Router();
 
 // GET /api/cities или /api/cities?country_id=1
-router.get('/cities', async (req, res) => {
+router.get('/cities', async (req: Req, res: Response<ApiResponse<City[]>>) => {
     try {
-        const result = await pool.query(
+        const { country_id } = req.query as CitiesQuery;
+        const result = await query<City>(
             'SELECT * FROM cities WHERE ($1::smallint IS NULL OR country_id = $1) ORDER BY name',
-            [req.query.country_id || null]
+            [country_id || null]
         );
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -18,9 +21,9 @@ router.get('/cities', async (req, res) => {
     }
 });
 
-router.get('/cities/:id', async (req, res) => {
+router.get('/cities/:id', async (req: Req<IdParams>, res: Response<ApiResponse<City>>) => {
     try {
-        const result = await pool.query('SELECT * FROM cities WHERE id = $1', [req.params.id]);
+        const result = await query<City>('SELECT * FROM cities WHERE id = $1', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Город не найден' });
         }
@@ -30,13 +33,13 @@ router.get('/cities/:id', async (req, res) => {
     }
 });
 
-router.post('/cities', auth, requireRole('admin'), async (req, res) => {
+router.post('/cities', auth, requireRole('admin'), async (req: Req<Record<string, string>, CityBody>, res: Response<ApiResponse<City>>) => {
     try {
         const { country_id, name } = req.body;
         if (!country_id || !name) {
             return res.status(400).json({ success: false, error: 'Поля country_id и name обязательны' });
         }
-        const result = await pool.query(
+        const result = await query<City>(
             'INSERT INTO cities (country_id, name) VALUES ($1, $2) RETURNING *',
             [country_id, name]
         );
@@ -53,13 +56,13 @@ router.post('/cities', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-router.put('/cities/:id', auth, requireRole('admin'), async (req, res) => {
+router.put('/cities/:id', auth, requireRole('admin'), async (req: Req<IdParams, CityBody>, res: Response<ApiResponse<City>>) => {
     try {
         const { country_id, name } = req.body;
         if (!country_id || !name) {
             return res.status(400).json({ success: false, error: 'Поля country_id и name обязательны' });
         }
-        const result = await pool.query(
+        const result = await query<City>(
             'UPDATE cities SET country_id = $1, name = $2 WHERE id = $3 RETURNING *',
             [country_id, name, req.params.id]
         );
@@ -79,9 +82,9 @@ router.put('/cities/:id', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-router.delete('/cities/:id', auth, requireRole('admin'), async (req, res) => {
+router.delete('/cities/:id', auth, requireRole('admin'), async (req: Req<IdParams>, res: Response<ApiResponse<City>>) => {
     try {
-        const result = await pool.query('DELETE FROM cities WHERE id = $1 RETURNING *', [req.params.id]);
+        const result = await query<City>('DELETE FROM cities WHERE id = $1 RETURNING *', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, error: 'Город не найден' });
         }
@@ -95,4 +98,4 @@ router.delete('/cities/:id', auth, requireRole('admin'), async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

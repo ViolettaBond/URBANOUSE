@@ -1,15 +1,19 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const pool = require('../db');
-const { auth, signToken, PUBLIC_USER_FIELDS } = require('../middleware/auth');
-const handleError = require('../utils/handleError');
+import { Router } from 'express';
+import type { Response } from 'express';
+import bcrypt from 'bcrypt';
+import { query } from '../db';
+import { auth, signToken, PUBLIC_USER_FIELDS } from '../middleware/auth';
+import handleError from '../utils/handleError';
+import type {
+    LoginBody, LoginResponse, MeResponse, RegisterBody, RegisterResponse, Req, User, UserRow
+} from '../types';
 
-const router = express.Router();
+const router = Router();
 const SALT_ROUNDS = 10;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Регистрация (роль всегда 'user', из тела запроса она не берётся)
-router.post('/register', async (req, res) => {
+router.post('/register', async (req: Req<Record<string, string>, RegisterBody>, res: Response<RegisterResponse>) => {
     try {
         const first_name = String(req.body.first_name || '').trim();
         const last_name = String(req.body.last_name || '').trim();
@@ -28,7 +32,7 @@ router.post('/register', async (req, res) => {
         }
 
         const hash = await bcrypt.hash(password, SALT_ROUNDS);
-        const result = await pool.query(
+        const result = await query<User>(
             `INSERT INTO users (first_name, last_name, email, password_hash, phone)
              VALUES ($1, $2, $3, $4, $5)
              RETURNING ${PUBLIC_USER_FIELDS}`,
@@ -42,7 +46,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Вход
-router.post('/login', async (req, res) => {
+router.post('/login', async (req: Req<Record<string, string>, LoginBody>, res: Response<LoginResponse>) => {
     try {
         const email = String(req.body.email || '').trim().toLowerCase();
         const password = String(req.body.password || '');
@@ -50,11 +54,11 @@ router.post('/login', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Введите email и пароль' });
         }
 
-        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        const result = await query<UserRow>('SELECT * FROM users WHERE email = $1', [email]);
         const user = result.rows[0];
 
         // password_hash может быть NULL, если аккаунт создан через Google/Apple
-        const ok = user && user.password_hash && await bcrypt.compare(password, user.password_hash);
+        const ok = !!user && !!user.password_hash && await bcrypt.compare(password, user.password_hash);
         if (!ok) {
             return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
         }
@@ -62,7 +66,7 @@ router.post('/login', async (req, res) => {
             return res.status(403).json({ success: false, error: 'Аккаунт заблокирован' });
         }
 
-        await pool.query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
+        await query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
 
         res.json({
             success: true,
@@ -83,9 +87,10 @@ router.post('/login', async (req, res) => {
 });
 
 // Текущий пользователь (защищённый маршрут)
-router.get('/me', auth, (req, res) => {
-    const { is_active, ...user } = req.user;
+router.get('/me', auth, (req: Req, res: Response<MeResponse>) => {
+    // auth гарантирует, что req.user заполнен
+    const { is_active, ...user } = req.user!;
     res.json({ success: true, user });
 });
 
-module.exports = router;
+export default router;
