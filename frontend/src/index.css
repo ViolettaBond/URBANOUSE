@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+@import 'tailwindcss';
+@import 'leaflet/dist/leaflet.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+    --font-jakarta: 'Plus Jakarta Sans', sans-serif;
+    --color-page: var(--page);
+    --color-panel: var(--panel);
+    --color-ink: var(--ink);
+    --color-muted: var(--muted);
+    --color-line: var(--line);
+    --color-accent: var(--accent);
+    --color-on-accent: var(--on-accent);
+    --color-watermark: var(--watermark);
+}
+
+:root {
+    --page: #ffffff;
+    --panel: #f2f4f7;
+    --ink: #0b132b;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #090c1b;
+    --on-accent: #ffffff;
+    --watermark: #f5f6f8;
+    color-scheme: light;
+}
+
+.dark {
+    --page: #000000;
+    --panel: #0e0f14;
+    --ink: #ffffff;
+    --muted: #a1a1aa;
+    --line: #2b2c33;
+    --accent: #ffffff;
+    --on-accent: #000000;
+    --watermark: #111216;
+    color-scheme: dark;
+}
+
+@layer base {
+    html {
+        scroll-behavior: smooth;
+    }
+    body {
+        @apply bg-page font-jakarta text-ink antialiased;
+        overflow-x: hidden;
+    }
+    img {
+        @apply max-w-full;
+    }
+    :focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 2px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        html {
+            scroll-behavior: auto;
+        }
+        * {
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+}
+
+@layer components {
+    .wrapper {
+        @apply mx-auto w-full max-w-[1840px] px-4 sm:px-8 lg:px-16;
+    }
+    .section {
+        @apply w-full py-16 lg:py-24;
+    }
+    .tag {
+        @apply inline-flex w-fit items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-medium;
+    }
+    .title {
+        @apply text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl xl:text-7xl;
+    }
+    .subtitle {
+        @apply max-w-2xl text-base leading-relaxed text-muted sm:text-lg;
+    }
+    .btn {
+        @apply inline-block rounded-full bg-accent px-8 py-3 text-center text-sm font-medium text-on-accent hover:opacity-80 disabled:opacity-60;
+    }
+    .btn-outline {
+        @apply inline-block rounded-full border border-ink px-8 py-3 text-center text-sm font-medium hover:bg-panel;
+    }
+    .input {
+        @apply w-full rounded-2xl border border-line bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted focus:border-ink;
+    }
+    .select {
+        @apply w-full cursor-pointer border-b border-line bg-transparent pb-3 text-lg outline-none focus-visible:border-ink;
+    }
+    .pill {
+        @apply rounded-full border border-line px-5 py-2 text-sm font-medium hover:bg-panel;
+    }
+    .pill-active {
+        @apply border-accent bg-accent text-on-accent hover:bg-accent;
+    }
+    .error {
+        @apply rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400;
+    }
+}
+
+select option {
+    background: var(--page);
+    color: var(--ink);
+}
+
+@utility scrollbar-hide {
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+.dark .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+.leaflet-container {
+    font-family: inherit;
+    background: var(--panel);
+}
+.price-pin {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-radius: 9999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+    transform: translate(-50%, -50%);
+    width: max-content;
+}
